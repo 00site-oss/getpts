@@ -1,8 +1,8 @@
 const { useState, useEffect, useCallback } = React;
 
-const API_URL = "https://script.google.com/macros/s/AKfycbzKc7100yZPTbkMMvQNhrvb5d8NHyGwYJQBWPzLTM9DA0748Cab_0VNTX9oRzUp-kY-pA/exec";
+const API_URL = "https://script.google.com/macros/s/AKfycbyvS-au_Ur5ahls3-lyqmAedydUFbquae0wlkXSL4f3hlCYQYDJoioFvyY4iPfEaMHaVQ/exec";
 
-async function api(action, payload = {}, timeoutMs = 20000) {
+async function api(action, payload = {}, timeoutMs = 15000) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
@@ -12,15 +12,19 @@ async function api(action, payload = {}, timeoutMs = 20000) {
       body: JSON.stringify({ action, ...payload }),
       signal: ctrl.signal,
       redirect: "follow",
+      mode: "cors",
     });
     const text = await res.text();
+    if (!text || text.trim().startsWith("<")) {
+      throw new Error("API returned HTML instead of JSON. Redeploy code.gs as Web App (Anyone) and update API_URL.");
+    }
     let data;
     try { data = JSON.parse(text); }
     catch (_) { throw new Error("Invalid server response. Redeploy code.gs Web App."); }
     if (!data.ok) throw new Error(data.error || "Request failed");
     return data;
   } catch (e) {
-    if (e.name === "AbortError") throw new Error("Server timeout. Check Web App deployment.");
+    if (e.name === "AbortError") throw new Error("Server timeout. Check Web App deployment / API_URL.");
     throw e;
   } finally {
     clearTimeout(timer);
@@ -75,7 +79,7 @@ const Icon = {
 
 /* ───────────── Top Nav (desktop) + Mobile header ───────────── */
 function TopNav({ site, user, tab, setTab, onLogout, onAuthClick }) {
-  const points = user && user.account_status === "active" ? (user.total_points ?? 0) : null;
+  const points = user && user.account_status === "active" ? (user.total_points != null ? user.total_points : 0) : null;
 
   return (
     <>
@@ -685,7 +689,7 @@ function Dashboard({ user, onLogout, site, setUserPoints }) {
   const load = useCallback(async () => {
     setLoading(true); setError("");
     try {
-      const res = await api("getDashboard", { user_id: user.user_id }, 20000);
+      const res = await api("getDashboard", { user_id: user.user_id }, 15000);
       setData(res);
       if (setUserPoints && res.user) setUserPoints(res.user.total_points);
     } catch (e) {
@@ -697,10 +701,11 @@ function Dashboard({ user, onLogout, site, setUserPoints }) {
 
   useEffect(() => { load(); }, [load]);
 
-  // Always have user stats available so dashboard never goes blank
+  // Stats from localStorage user first — dashboard visible immediately
   const u = data && data.user ? { ...user, ...data.user } : user;
   const quizzes = (data && data.quizzes) || [];
   const rewards = (data && data.rewards) || [];
+  const showContent = true; // never hide dashboard shell
 
   if (activeQuiz) {
     return (
@@ -723,9 +728,6 @@ function Dashboard({ user, onLogout, site, setUserPoints }) {
       <Ticker />
 
       <div className="dash-wrap page-content">
-        {loading && !data && (
-          <div className="center-msg"><div className="spinner"></div><p>Loading dashboard…</p></div>
-        )}
         {error && (
           <div className="result-banner fail" style={{ marginBottom: "1rem" }}>
             <p style={{ margin: 0 }}>{error}</p>
@@ -733,31 +735,34 @@ function Dashboard({ user, onLogout, site, setUserPoints }) {
           </div>
         )}
 
-        {/* Stats always visible once we have user data — never blank dashboard */}
-        {(!loading || data) && (
+        {/* Stats always visible from user object — never blank */}
+        {showContent && (
           <>
             <div className="user-stats">
               <div className="stat-box">
                 <span className="label">Total <span className="accent">Points</span></span>
-                <span className="value">{u.total_points ?? 0}</span>
+                <span className="value">{u.total_points != null ? u.total_points : 0}</span>
               </div>
               <div className="stat-box">
                 <span className="label">CR<span className="accent">%</span></span>
-                <span className="value">{u.CR_pct ?? 100}%</span>
+                <span className="value">{u.CR_pct != null ? u.CR_pct : 100}%</span>
               </div>
               <div className="stat-box">
                 <span className="label">AR<span className="accent">%</span></span>
-                <span className="value">{u.AR_pct ?? 100}%</span>
+                <span className="value">{u.AR_pct != null ? u.AR_pct : 100}%</span>
               </div>
               <div className="stat-box">
                 <span className="label">Passed</span>
-                <span className="value">{u.quizzes_passed ?? 0}</span>
+                <span className="value">{u.quizzes_passed != null ? u.quizzes_passed : 0}</span>
               </div>
               <div className="stat-box">
                 <span className="label">Next <span className="accent">Bonus</span></span>
-                <span className="value">+{Math.round((u.CR_pct ?? 100) / 10) + Math.round((u.AR_pct ?? 100) / 100)}</span>
+                <span className="value">+{Math.round((u.CR_pct != null ? u.CR_pct : 100) / 10) + Math.round((u.AR_pct != null ? u.AR_pct : 100) / 100)}</span>
               </div>
             </div>
+            {loading && !data && (
+              <div className="center-msg" style={{ padding: "1rem" }}><div className="spinner"></div><p>Loading quizzes…</p></div>
+            )}
 
             {result && (
               <div className={"result-banner " + (result.cancelled ? "cancelled" : result.passed ? "pass" : "fail")}>
@@ -812,36 +817,34 @@ function Dashboard({ user, onLogout, site, setUserPoints }) {
 
 /* ───────────── Root ───────────── */
 function App() {
-  const [user, setUser] = useState(null);
+  // Restore user immediately from localStorage — never block on API
+  const [user, setUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem("qr_user");
+      return saved ? JSON.parse(saved) : null;
+    } catch (_) { return null; }
+  });
   const [site, setSite] = useState({ site_name: "Quiz Rewards", site_logo_url: "", site_tagline: "", installed: true });
-  const [booting, setBooting] = useState(true);
   const [notInstalled, setNotInstalled] = useState(false);
   const [showAuth, setShowAuth] = useState(false);
+  const [apiError, setApiError] = useState("");
 
+  // Load site info in background — UI is already visible
   useEffect(() => {
-    let done = false;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      const saved = localStorage.getItem("qr_user");
-      if (saved) {
-        try { setUser(JSON.parse(saved)); } catch (_) {}
-      }
-      setBooting(false);
-    };
-    // Hard cap so UI never stays on Loading forever
-    const hard = setTimeout(finish, 8000);
-    api("getSiteInfo", {}, 7000)
+    let cancelled = false;
+    api("getSiteInfo", {}, 8000)
       .then(d => {
+        if (cancelled) return;
         setSite(d);
-        if (!d.installed) setNotInstalled(true);
+        setApiError("");
+        if (d.installed === false) setNotInstalled(true);
       })
-      .catch(() => {})
-      .finally(() => {
-        clearTimeout(hard);
-        finish();
+      .catch(e => {
+        if (cancelled) return;
+        // Don't block UI; only show banner if we have no cached user
+        setApiError(e.message || "Cannot reach API");
       });
-    return () => clearTimeout(hard);
+    return () => { cancelled = true; };
   }, []);
 
   const handleAuth = (u) => {
@@ -858,18 +861,16 @@ function App() {
     setUser(null);
     setShowAuth(false);
   };
-  const setUserPoints = (pts) => {
+  // Stable identity + no-op when unchanged, otherwise Dashboard's load() re-fires forever
+  const setUserPoints = useCallback((pts) => {
     setUser(prev => {
       if (!prev) return prev;
+      if (prev.total_points === pts) return prev;
       const next = { ...prev, total_points: pts };
-      localStorage.setItem("qr_user", JSON.stringify(next));
+      try { localStorage.setItem("qr_user", JSON.stringify(next)); } catch (_) {}
       return next;
     });
-  };
-
-  if (booting) {
-    return <div className="auth-wrap"><div className="auth-card center"><div className="spinner"></div><p>Loading…</p></div></div>;
-  }
+  }, []);
 
   if (notInstalled) {
     return (
@@ -882,6 +883,13 @@ function App() {
       </div>
     );
   }
+
+  // Non-blocking API warning banner
+  const apiBanner = apiError && !user ? (
+    <div style={{ background: "#1e293b", borderBottom: "1px solid #ef4444", padding: "0.6rem 1rem", textAlign: "center", fontSize: "0.85rem", color: "#fca5a5" }}>
+      API issue: {apiError} — check API_URL in app.jsx and redeploy code.gs
+    </div>
+  ) : null;
 
   if (user && user.account_status === "active") {
     return <Dashboard user={user} onLogout={logout} site={site} setUserPoints={setUserPoints} />;
@@ -899,6 +907,7 @@ function App() {
   if (showAuth) {
     return (
       <>
+        {apiBanner}
         <TopNav site={site} user={null} onAuthClick={() => setShowAuth(true)} />
         <AuthScreen onAuth={handleAuth} site={site} onBack={() => setShowAuth(false)} />
       </>
@@ -907,10 +916,12 @@ function App() {
 
   return (
     <>
+      {apiBanner}
       <TopNav site={site} user={null} onAuthClick={() => setShowAuth(true)} />
       <Landing site={site} onAuthClick={() => setShowAuth(true)} />
     </>
   );
 }
 
+window.__QR_MOUNTED = true;
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
