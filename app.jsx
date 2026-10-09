@@ -685,11 +685,21 @@ function Dashboard({ user, onLogout, site, setUserPoints }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [tab, setTab] = useState("quizzes");
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!loading) { setElapsed(0); return; }
+    const t0 = Date.now();
+    const id = setInterval(() => setElapsed(Math.round((Date.now() - t0) / 1000)), 1000);
+    return () => clearInterval(id);
+  }, [loading]);
 
   const load = useCallback(async () => {
     setLoading(true); setError("");
+    const t0 = Date.now();
     try {
       const res = await api("getDashboard", { user_id: user.user_id }, 15000);
+      console.log("getDashboard OK in " + (Date.now() - t0) + "ms", res);
       setData(res);
       if (setUserPoints && res.user) setUserPoints(res.user.total_points);
     } catch (e) {
@@ -761,7 +771,7 @@ function Dashboard({ user, onLogout, site, setUserPoints }) {
               </div>
             </div>
             {loading && !data && (
-              <div className="center-msg" style={{ padding: "1rem" }}><div className="spinner"></div><p>Loading quizzes…</p></div>
+              <div className="center-msg" style={{ padding: "1rem" }}><div className="spinner"></div><p>Loading quizzes… {elapsed}s (times out at 15s)</p></div>
             )}
 
             {result && (
@@ -923,5 +933,24 @@ function App() {
   );
 }
 
+/* Shows a visible error (instead of a blank/endless-loading page) if any component crashes */
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { err: null }; }
+  static getDerivedStateFromError(err) { return { err }; }
+  componentDidCatch(err, info) { console.error("QR crash:", err, info); }
+  render() {
+    if (!this.state.err) return this.props.children;
+    return (
+      <div style={{ padding: 24, color: "#e2e8f0", background: "#0a0e1a", minHeight: "100vh", fontFamily: "sans-serif" }}>
+        <h2>Something crashed</h2>
+        <pre style={{ whiteSpace: "pre-wrap", color: "#fca5a5", margin: "12px 0" }}>{String(this.state.err && (this.state.err.stack || this.state.err.message || this.state.err))}</pre>
+        <button style={{ width: "auto" }} onClick={() => { try { localStorage.removeItem("qr_user"); } catch (_) {} location.reload(); }}>
+          Clear login &amp; reload
+        </button>
+      </div>
+    );
+  }
+}
+
 window.__QR_MOUNTED = true;
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+ReactDOM.createRoot(document.getElementById("root")).render(<ErrorBoundary><App /></ErrorBoundary>);
