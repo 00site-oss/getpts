@@ -5,31 +5,38 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Quiz Rewards</title>
   <link rel="stylesheet" href="styles.css" />
-  <!-- Replace YOUR_PAYPAL_CLIENT_ID with your PayPal Sandbox / Live Client ID -->
-  <script src="https://www.paypal.com/sdk/js?client-id=YOUR_PAYPAL_CLIENT_ID&currency=USD"></script>
   <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone@7.26.0/babel.min.js"></script>
+  <!-- PayPal: replace YOUR_PAYPAL_CLIENT_ID — async so it never blocks the app -->
+  <script src="https://www.paypal.com/sdk/js?client-id=YOUR_PAYPAL_CLIENT_ID&currency=USD" async defer></script>
 </head>
 <body>
   <div id="root">
-    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#070b14;color:#94a3b8;font-family:sans-serif;">
-      Loading…
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#070b14;color:#94a3b8;font-family:sans-serif;flex-direction:column;gap:12px;">
+      <div style="width:36px;height:36px;border:3px solid #1e293b;border-top-color:#3b9eff;border-radius:50%;animation:spin .7s linear infinite;"></div>
+      <span>Loading…</span>
     </div>
   </div>
+  <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
   <script type="text/babel" src="app.jsx" data-presets="react"></script>
   <script>
-    // If Babel/React fail to load app within 12s, show a clear error
+    // Fail-fast if React/Babel never mounts the app
     setTimeout(function () {
       var root = document.getElementById("root");
-      if (root && root.innerText.trim() === "Loading…") {
+      if (!root) return;
+      var t = (root.innerText || "").trim();
+      if ((t === "Loading…" || t.indexOf("Loading…") === 0) && !window.__QR_MOUNTED) {
         root.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#070b14;color:#e2e8f0;font-family:sans-serif;padding:24px;text-align:center;">' +
-          '<div><h2 style="margin-bottom:12px;">App failed to load</h2>' +
-          '<p style="color:#94a3b8;margin-bottom:8px;">Serve these files over HTTP (not file://).</p>' +
-          '<p style="color:#94a3b8;">Example: <code>npx serve .</code> or upload to Netlify / GitHub Pages.</p>' +
-          '<p style="color:#94a3b8;margin-top:12px;">Also redeploy <code>code.gs</code> as a new Web App version.</p></div></div>';
+          '<div style="max-width:420px">' +
+          '<h2 style="margin-bottom:12px;">App failed to load</h2>' +
+          '<p style="color:#94a3b8;margin-bottom:8px;">1. Serve over <strong>HTTP</strong> (not file://)</p>' +
+          '<p style="color:#94a3b8;margin-bottom:8px;">Example: <code style="background:#1e293b;padding:2px 6px;border-radius:4px">npx serve .</code></p>' +
+          '<p style="color:#94a3b8;margin-bottom:8px;">2. Check browser console (F12) for errors</p>' +
+          '<p style="color:#94a3b8;margin-top:12px;">3. Redeploy <code>code.gs</code> as Web App and update API_URL</p>' +
+          '</div></div>';
       }
-    }, 12000);
+    }, 10000);
   </script>
 </body>
 </html>
