@@ -21,6 +21,14 @@
   <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
   <script type="text/babel" src="app.jsx" data-presets="react"></script>
   <script>
+    // Show any script error on screen (so a stuck "Loading…" explains itself)
+    window.addEventListener("error", function (e) {
+      var root = document.getElementById("root");
+      if (root && !window.__QR_MOUNTED) {
+        root.innerHTML = '<pre style="white-space:pre-wrap;padding:24px;color:#fca5a5;background:#070b14;min-height:100vh;font-family:monospace">Script error:\n' +
+          String(e.message) + '\n' + (e.filename || "") + ':' + (e.lineno || "") + '</pre>';
+      }
+    });
     // Fail-fast if React/Babel never mounts the app
     setTimeout(function () {
       var root = document.getElementById("root");
