@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GAIN.GG</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #1b1e27;
+      --bg-sidebar: #1f2330;
+      --bg-card: #2a2e3d;
+      --bg-header: #181b24;
+      --text-main: #ffffff;
+      --text-muted: #8a8d93;
+      --accent-blue: #3b82f6;
+      --border-color: #363b4d;
+      --success-green: #22c55e;
+      --warning-red: #ef4444;
+      --logo-purple: #5b4dff;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Roboto', sans-serif; }
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: 250px;
+      background-color: var(--bg-sidebar);
+      display: flex;
+      flex-direction: column;
+      border-right: 1px solid var(--border-color);
+      flex-shrink: 0;
+      transition: transform 0.3s ease;
+      z-index: 1000;
+    }
+    .sidebar-logo {
+      padding: 20px;
+      font-size: 24px;
+      font-weight: 900;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid var(--border-color);
+      letter-spacing: 0.5px;
+    }
+    .logo-icon {
+      color: white;
+      background: var(--logo-purple);
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+    .nav-links { flex: 1; overflow-y: auto; padding: 10px 0; }
+    .nav-item {
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      color: var(--text-muted);
+      text-decoration: none;
+      transition: 0.2s;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .nav-item:hover, .nav-item.active {
+      background-color: rgba(255, 255, 255, 0.05);
+      color: white;
+      border-left: 3px solid var(--accent-blue);
+    }
+    .nav-item i { width: 20px; text-align: center; }
+
+    .sidebar-bottom {
+      padding: 15px;
+      border-top: 1px solid var(--border-color);
+    }
+    .user-ticker-bar {
+      background-color: #1f2b42;
+      border-radius: 6px;
+      padding: 8px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .user-ticker-left { display: flex; align-items: center; gap: 10px; }
+    .ticker-avatar {
+      width: 28px; height: 28px;
+      background-color: #7a8798;
+      color: white; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: bold; font-size: 14px;
+    }
+    .ticker-username { font-size: 15px; font-weight: 500; color: #ffffff; }
+    .ticker-balance {
+      background-color: #2a3954;
+      padding: 4px 10px 4px 6px;
+      border-radius: 20px;
+      display: flex; align-items: center; gap: 6px;
+      font-size: 14px; font-weight: 700; color: white;
+    }
+    .ticker-balance-icon { color: #fbbf24; font-size: 16px; }
+
+    /* Main Content */
+    .main-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      width: 100%;
+    }
+    .top-bar-wrapper {
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      z-index: 900;
+    }
+    .top-header {
+      height: 60px;
+      background-color: var(--bg-header);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-color);
+    }
+    .mobile-menu-btn { display: none; font-size: 22px; color: white; cursor: pointer; }
+    .mobile-logo {
+      display: none;
+      font-size: 18px;
+      font-weight: 900;
+      align-items: center;
+      gap: 8px;
+    }
+    .mobile-logo .logo-icon { width: 24px; height: 24px; font-size: 12px; }
+    .header-chat-btn {
+      color: var(--text-muted);
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* Ticker */
+    .header-ticker-wrapper {
+      background-color: var(--bg-header);
+      height: 45px;
+      border-bottom: 1px solid var(--border-color);
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      align-items: center;
+      mask-image: linear-gradient(to right, transparent, black 3%, black 97%, transparent);
+      -webkit-mask-image: linear-gradient(to right, transparent, black 3%, black 97%, transparent);
+    }
+    .header-ticker-track {
+      display: flex;
+      gap: 10px;
+      width: max-content;
+      padding: 0 15px;
+      animation: scrollTicker 40s linear infinite;
+    }
+    .header-ticker-track:hover { animation-play-state: paused; }
+    @keyframes scrollTicker {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(-50%); }
+    }
+    .ticker-user-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 10px 4px 4px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      color: white;
+      white-space: nowrap;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .pill-green { background-color: #0f5132; }
+    .pill-dark-orange { background-color: #8a4b20; }
+    .pill-red { background-color: #991b1b; }
+    .pill-teal { background-color: #0f766e; }
+    .pill-purple { background-color: #5b21b6; }
+    .pill-dark { background-color: #374151; }
+    .ticker-user-avatar {
+      width: 24px; height: 24px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: bold; color: #fff;
+    }
+    .av-green { background-color: #10b981; }
+    .av-blue { background-color: #3b82f6; }
+    .av-purple { background-color: #8b5cf6; }
+    .av-red { background-color: #ef4444; }
+    .av-teal { background-color: #14b8a6; }
+    .ticker-user-amount {
+      background: rgba(0, 0, 0, 0.3);
+      padding: 2px 8px;
+      border-radius: 12px;
+      display: flex; align-items: center; gap: 5px;
+      font-size: 12px; font-weight: bold;
+    }
+    .ticker-user-amount i { color: #fbbf24; font-size: 12px; }
+
+    /* Content */
+    .content-scroll {
+      padding: 30px;
+      overflow-y: auto;
+      flex: 1;
+    }
+    h2 { font-size: 18px; font-weight: 500; margin-bottom: 15px; }
+    p.subtext { color: var(--text-muted); font-size: 13px; margin-bottom: 20px; }
+
+    .grid-offers, .grid-surveys, .grid-featured, .grid-rewards {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 15px;
+      margin-bottom: 40px;
+    }
+    .offer-card {
+      background: var(--bg-card);
+      border-radius: 4px;
+      overflow: hidden;
+      text-align: center;
+      cursor: pointer;
+      transition: transform 0.2s;
+      border: 1px solid var(--border-color);
+    }
+    .offer-card:hover { transform: translateY(-2px); border-color: var(--accent-blue); }
+    .offer-logo {
+      height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 18px;
+      color: white;
+    }
+    .offer-name {
+      padding: 10px;
+      background: rgba(0,0,0,0.2);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .featured-card {
+      background: var(--bg-card);
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid var(--border-color);
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .featured-card:hover { border-color: var(--accent-blue); transform: translateY(-2px); }
+    .featured-img {
+      height: 100px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 30px;
+      color: rgba(255,255,255,0.2);
+      position: relative;
+    }
+    .reward-tag {
+      position: absolute;
+      top: 5px;
+      right: 5px;
+      background: var(--warning-red);
+      font-size: 10px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      color: white;
+    }
+    .featured-info {
+      padding: 10px;
+      text-align: center;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .reward-card {
+      background: var(--bg-card);
+      border-radius: 6px;
+      padding: 16px;
+      border: 1px solid var(--border-color);
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .reward-card:hover { border-color: var(--accent-blue); }
+    .reward-name { font-weight: 600; margin-bottom: 6px; }
+    .reward-cost { color: #fbbf24; font-size: 14px; margin-bottom: 8px; }
+    .reward-details { font-size: 12px; color: var(--text-muted); }
+
+    /* Chat Sidebar */
+    .chat-sidebar {
+      width: 300px;
+      background-color: var(--bg-sidebar);
+      border-left: 1px solid var(--border-color);
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.3s ease;
+      z-index: 1000;
+    }
+    .chat-header {
+      padding: 15px;
+      border-bottom: 1px solid var(--border-color);
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .chat-close-btn { display: none; cursor: pointer; margin-left: auto; color: var(--text-muted); }
+    .chat-messages {
+      flex: 1;
+      padding: 15px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      font-size: 13px;
+    }
+    .message { display: flex; gap: 10px; }
+    .msg-avatar {
+      width: 30px; height: 30px;
+      border-radius: 4px;
+      background: #555;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    .msg-content { display: flex; flex-direction: column; }
+    .msg-user { font-weight: bold; margin-bottom: 2px; font-size: 12px; }
+    .msg-user.blue { color: #3b82f6; }
+    .msg-text { color: var(--text-muted); line-height: 1.4; }
+    .chat-input-area {
+      padding: 15px;
+      border-top: 1px solid var(--border-color);
+      background: #1a1d26;
+    }
+    .chat-input {
+      width: 100%;
+      background: var(--bg-header);
+      border: 1px solid var(--border-color);
+      padding: 10px;
+      border-radius: 4px;
+      color: white;
+      margin-bottom: 10px;
+      outline: none;
+    }
+    .chat-icons { display: flex; gap: 15px; color: var(--text-muted); font-size: 14px; }
+
+    .fab-chat {
+      display: none;
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 55px;
+      height: 55px;
+      border-radius: 50%;
+      background-color: var(--accent-blue);
+      color: white;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+      cursor: pointer;
+      z-index: 900;
+    }
+    .overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.5);
+      z-index: 999;
+    }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1f2330;
+      color: white;
+      padding: 12px 24px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      z-index: 9999;
+      display: none;
+      font-size: 14px;
+    }
+    .toast.show { display: block; animation: fadeIn 0.3s; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* Responsive */
+    @media (max-width: 1200px) {
+      .grid-offers, .grid-featured, .grid-rewards { grid-template-columns: repeat(3, 1fr); }
+    }
+    @media (max-width: 992px) {
+      .chat-sidebar {
+        position: fixed;
+        right: 0; top: 0;
+        height: 100%;
+        transform: translateX(100%);
+        box-shadow: -5px 0 15px rgba(0,0,0,0.5);
+      }
+      .chat-sidebar.open { transform: translateX(0); }
+      .chat-close-btn { display: block; }
+      .fab-chat { display: flex; }
+      .grid-offers, .grid-featured, .grid-rewards { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 768px) {
+      .sidebar {
+        position: fixed;
+        left: 0; top: 0;
+        height: 100%;
+        transform: translateX(-100%);
+        box-shadow: 5px 0 15px rgba(0,0,0,0.5);
+      }
+      .sidebar.open { transform: translateX(0); }
+      .top-header { justify-content: space-between; padding: 0 15px; }
+      .mobile-menu-btn { display: block; }
+      .mobile-logo { display: flex; }
+      .header-chat-btn span { display: none; }
+      .header-chat-btn i { font-size: 20px; }
+      .header-ticker-wrapper { height: 40px; }
+      .content-scroll { padding: 15px; }
+      .grid-offers, .grid-featured, .grid-rewards { grid-template-columns: 1fr; }
+      .overlay.active { display: block; }
+    }
+  </style>
+</head>
+<body>
+  <div class="overlay" id="overlay" onclick="toggleMenu()"></div>
+
+  <!-- Left Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <i class="fa-solid fa-cube logo-icon" id="logoIcon"></i>
+      <span id="logoText">GAIN.GG</span>
+    </div>
+    <div class="nav-links">
+      <a class="nav-item active" onclick="showSection('earn')"><i class="fa-solid fa-dollar-sign"></i> Earn</a>
+      <a class="nav-item" onclick="showSection('withdraw')"><i class="fa-solid fa-wallet"></i> Withdraw</a>
+      <a class="nav-item" onclick="showSection('profile')"><i class="fa-solid fa-user"></i> Profile</a>
+    </div>
+    <div class="sidebar-bottom">
+      <div class="user-ticker-bar">
+        <div class="user-ticker-left">
+          <div class="ticker-avatar" id="userAvatar">A</div>
+          <span class="ticker-username" id="userName">Antonio</span>
+        </div>
+        <div class="ticker-balance">
+          <div class="ticker-balance-icon"><i class="fa-solid fa-coins"></i></div>
+          <span id="userBalance">515</span>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <div class="top-bar-wrapper">
+      <header class="top-header">
+        <i class="fa-solid fa-bars mobile-menu-btn" onclick="toggleMenu()"></i>
+        <div class="mobile-logo">
+          <i class="fa-solid fa-cube logo-icon"></i>
+          <span id="mobileLogoText">GAIN.GG</span>
+        </div>
+        <div class="header-chat-btn" onclick="toggleChat()">
+          <i class="fa-solid fa-comment-dots"></i> <span>Chat</span>
+        </div>
+      </header>
+
+      <!-- Live Ticker -->
+      <div class="header-ticker-wrapper">
+        <div class="header-ticker-track" id="tickerTrack">
+          <!-- filled by JS -->
+        </div>
+      </div>
+    </div>
+
+    <div class="content-scroll" id="contentArea">
+      <!-- Earn Section -->
+      <div id="section-earn">
+        <h2>Offer Walls</h2>
+        <p class="subtext">Choose from one of our offer wall providers below to start earning coins.</p>
+        <div class="grid-offers" id="offerwallsGrid"></div>
+
+        <h2>Featured Offers</h2>
+        <p class="subtext">Hot offers from our offer wall providers.</p>
+        <div class="grid-featured" id="assignmentsGrid"></div>
+      </div>
+
+      <!-- Withdraw Section -->
+      <div id="section-withdraw" style="display:none;">
+        <h2>Withdraw / Rewards</h2>
+        <p class="subtext">Redeem your coins for real rewards.</p>
+        <div class="grid-rewards" id="rewardsGrid"></div>
+      </div>
+
+      <!-- Profile Section -->
+      <div id="section-profile" style="display:none;">
+        <h2>Profile</h2>
+        <p class="subtext">Your account information.</p>
+        <div style="background:var(--bg-card);padding:20px;border-radius:8px;border:1px solid var(--border-color);max-width:400px;">
+          <p><strong>Username:</strong> <span id="profileName">Antonio</span></p>
+          <p style="margin-top:10px;"><strong>Balance:</strong> <span id="profileBalance">515</span> coins</p>
+          <p style="margin-top:10px;"><strong>Status:</strong> <span id="profileStatus">Active</span></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Chat Sidebar -->
+  <aside class="chat-sidebar" id="chatSidebar">
+    <div class="chat-header">
+      <i class="fa-solid fa-comments"></i> Chat
+      <span style="margin-left:auto;font-size:12px;color:#8a8d93;">Support</span>
+      <i class="fa-solid fa-xmark chat-close-btn" onclick="toggleChat()"></i>
+    </div>
+    <div class="chat-messages" id="chatMessages"></div>
+    <div class="chat-input-area">
+      <input type="text" class="chat-input" id="chatInput" placeholder="Say Something!" onkeypress="if(event.key==='Enter')sendChat()">
+      <div class="chat-icons">
+        <i class="fa-solid fa-face-smile"></i>
+        <i class="fa-solid fa-gift"></i>
+        <i class="fa-solid fa-image"></i>
+      </div>
+    </div>
+  </aside>
+
+  <div class="fab-chat" onclick="toggleChat()">
+    <i class="fa-solid fa-comment-dots"></i>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ====================== CONFIG ======================
+    // PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE
+    const API_URL = 'https://script.google.com/macros/s/AKfycbz1l--TT2SlQ9ObL0bJP0cXmRZDvsttXJDAVcFl2E74jVh4O0BNUItgfEbl1UJfnilj/exec';
+
+    // Current logged-in user (in real app this comes from login)
+    let CURRENT_USER = {
+      userId: 'user_001',
+      username: 'Antonio',
+      balance: 515
+    };
+
+    // ====================== HELPERS ======================
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
+
+    async function api(action, data = {}) {
+      try {
+        const res = await fetch(API_URL, {
+          method: 'POST',
+          body: JSON.stringify({ action, ...data })
+        });
+        return await res.json();
+      } catch (e) {
+        console.error(e);
+        return { success: false, message: 'Network error' };
+      }
+    }
+
+    // ====================== LOAD DATA ======================
+    async function loadSiteConfig() {
+      const res = await api('getSiteConfig');
+      if (res.success) {
+        document.getElementById('logoText').textContent = res.data.logoText;
+        document.getElementById('mobileLogoText').textContent = res.data.logoText;
+        document.title = res.data.siteName;
+        // logo icon
+        const iconEl = document.getElementById('logoIcon');
+        iconEl.className = `fa-solid ${res.data.logoIcon} logo-icon`;
+      }
+    }
+
+    async function loadOfferwalls() {
+      const res = await api('getOfferwalls');
+      const grid = document.getElementById('offerwallsGrid');
+      grid.innerHTML = '';
+      if (!res.success) return;
+
+      res.data.forEach(ow => {
+        const card = document.createElement('div');
+        card.className = 'offer-card';
+        card.innerHTML = `
+          <div class="offer-logo" style="background:${ow.Color}">
+            ${ow.Icon ? `<i class="fa-solid ${ow.Icon}"></i> ` : ''}${ow.DisplayName}
+          </div>
+          <div class="offer-name">${ow.DisplayName}</div>
+        `;
+        card.onclick = () => {
+          if (ow.ExternalURL) window.open(ow.ExternalURL, '_blank');
+          else showToast('Offer wall coming soon');
+        };
+        grid.appendChild(card);
+      });
+    }
+
+    async function loadAssignments() {
+      const res = await api('getAssignments');
+      const grid = document.getElementById('assignmentsGrid');
+      grid.innerHTML = '';
+      if (!res.success) return;
+
+      res.data.forEach(a => {
+        const card = document.createElement('div');
+        card.className = 'featured-card';
+        card.innerHTML = `
+          <div class="featured-img" style="background:${a.ImageGradient}">
+            <i class="fa-solid ${a.Icon || 'fa-gift'}"></i>
+            <div class="reward-tag">${Number(a.Points).toLocaleString()} coins</div>
+          </div>
+          <div class="featured-info">${a.Name}</div>
+        `;
+        card.onclick = () => completeAssignment(a.ID, a.Name, a.Points);
+        grid.appendChild(card);
+      });
+    }
+
+    async function loadRewards() {
+      const res = await api('getRewards');
+      const grid = document.getElementById('rewardsGrid');
+      grid.innerHTML = '';
+      if (!res.success) return;
+
+      res.data.forEach(r => {
+        const card = document.createElement('div');
+        card.className = 'reward-card';
+        card.innerHTML = `
+          <div class="reward-name">${r.Name}</div>
+          <div class="reward-cost"><i class="fa-solid fa-coins"></i> ${Number(r.CostCoins).toLocaleString()} coins</div>
+          <div class="reward-details">${r.Details}</div>
+        `;
+        card.onclick = () => redeemReward(r.RewardID, r.Name, r.CostCoins);
+        grid.appendChild(card);
+      });
+    }
+
+    async function loadTicker() {
+      const res = await api('getTicker');
+      const track = document.getElementById('tickerTrack');
+      track.innerHTML = '';
+      if (!res.success) return;
+
+      // Create two sets for seamless loop
+      const items = res.data;
+      const colors = ['pill-green', 'pill-dark-orange', 'pill-red', 'pill-teal', 'pill-purple', 'pill-dark'];
+      const avColors = ['av-green', 'av-blue', 'av-purple', 'av-red', 'av-teal'];
+
+      function createPill(log, i) {
+        const pill = document.createElement('div');
+        pill.className = `ticker-user-pill ${colors[i % colors.length]}`;
+        const initial = (log.Username || '?')[0].toUpperCase();
+        pill.innerHTML = `
+          <div class="ticker-user-avatar ${avColors[i % avColors.length]}">${initial}</div>
+          <span>${log.Username}</span>
+          <div class="ticker-user-amount"><i class="fa-solid fa-coins"></i> ${log.Amount}</div>
+        `;
+        return pill;
+      }
+
+      items.forEach((log, i) => track.appendChild(createPill(log, i)));
+      items.forEach((log, i) => track.appendChild(createPill(log, i))); // duplicate for loop
+    }
+
+    async function loadChat() {
+      const res = await api('getChat');
+      const box = document.getElementById('chatMessages');
+      box.innerHTML = '';
+      if (!res.success) return;
+
+      res.data.forEach(m => {
+        const div = document.createElement('div');
+        div.className = 'message';
+        div.innerHTML = `
+          <div class="msg-avatar"><i class="fa-solid fa-user"></i></div>
+          <div class="msg-content">
+            <div class="msg-user blue">${m.Username} <span style="font-size:10px;color:#666;font-weight:normal;">${new Date(m.Timestamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span></div>
+            <div class="msg-text">${m.Message}</div>
+          </div>
+        `;
+        box.appendChild(div);
+      });
+      box.scrollTop = box.scrollHeight;
+    }
+
+    async function loadUserBalance() {
+      const res = await api('getUserBalance', { userId: CURRENT_USER.userId });
+      if (res.success) {
+        CURRENT_USER.balance = res.data.balance;
+        document.getElementById('userBalance').textContent = res.data.balance;
+        document.getElementById('profileBalance').textContent = res.data.balance;
+        document.getElementById('profileStatus').textContent = res.data.isBanned ? 'BANNED' : (res.data.isMuted ? 'Muted' : 'Active');
+      }
+    }
+
+    // ====================== ACTIONS ======================
+    async function completeAssignment(id, name, points) {
+      if (!confirm(`Complete "${name}" for ${points} coins?`)) return;
+      const res = await api('completeAssignment', {
+        userId: CURRENT_USER.userId,
+        assignmentId: id
+      });
+      if (res.success) {
+        showToast(res.message);
+        loadUserBalance();
+        loadTicker();
+      } else {
+        showToast(res.message || 'Failed');
+      }
+    }
+
+    async function redeemReward(id, name, cost) {
+      if (!confirm(`Redeem "${name}" for ${cost} coins?`)) return;
+      const res = await api('redeem', {
+        userId: CURRENT_USER.userId,
+        rewardId: id
+      });
+      if (res.success) {
+        showToast(res.message);
+        loadUserBalance();
+        loadTicker();
+      } else {
+        showToast(res.message || 'Failed');
+      }
+    }
+
+    async function sendChat() {
+      const input = document.getElementById('chatInput');
+      const msg = input.value.trim();
+      if (!msg) return;
+
+      const res = await api('sendChat', {
+        userId: CURRENT_USER.userId,
+        message: msg
+      });
+      if (res.success) {
+        input.value = '';
+        loadChat();
+      } else {
+        showToast(res.message);
+      }
+    }
+
+    // ====================== UI ======================
+    function toggleMenu() {
+      const sidebar = document.getElementById('sidebar');
+      const overlay = document.getElementById('overlay');
+      sidebar.classList.toggle('open');
+      overlay.classList.toggle('active', sidebar.classList.contains('open'));
+    }
+
+    function toggleChat() {
+      document.getElementById('chatSidebar').classList.toggle('open');
+    }
+
+    function showSection(name) {
+      document.getElementById('section-earn').style.display = name === 'earn' ? 'block' : 'none';
+      document.getElementById('section-withdraw').style.display = name === 'withdraw' ? 'block' : 'none';
+      document.getElementById('section-profile').style.display = name === 'profile' ? 'block' : 'none';
+
+      document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+      event.target.closest('.nav-item').classList.add('active');
+    }
+
+    // ====================== INIT ======================
+    async function init() {
+      await loadSiteConfig();
+      await loadUserBalance();
+      await loadOfferwalls();
+      await loadAssignments();
+      await loadRewards();
+      await loadTicker();
+      await loadChat();
+
+      // Refresh ticker + chat every 30s
+      setInterval(() => {
+        loadTicker();
+        loadChat();
+        loadUserBalance();
+      }, 30000);
+    }
+
+    init();
+  </script>
+</body>
+</html>
