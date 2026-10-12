@@ -4,8 +4,10 @@ Matches the rules from the provided image:
 
 | Rule | Implementation |
 |------|----------------|
-| Enroll fee $1 = 100 pts | `enrollUser()` gives 100 points |
-| Unlock code (e.g. `5E42C`) | Gives bonus pts then applies fee % |
+| No free points on register | User starts with **0 pts**, status PENDING |
+| Must pay $1 (PayPal) | Then admin gives Unlock# **or** clicks Confirm Pay |
+| Unlock# (ENROLL type) | Grants 100 pts and sets status ACTIVE |
+| Unlock# (BONUS type) | Extra pts + optional fee % |
 | Each question cost 10 pts | Admin can set custom amount per question |
 | Only 2 tries allowed | Enforced in `submitAnswer()` |
 | Correct 1st try → full pts | Full points awarded |
@@ -51,6 +53,7 @@ Change it in `Code.gs`:
 
 ```js
 const ADMIN_PASSWORD = 'your-strong-password';
+const PAYPAL_EMAIL = 'your-paypal@email.com';
 ```
 
 ## Sheets created automatically

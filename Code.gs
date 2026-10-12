@@ -1,9 +1,10 @@
 /**
  * QUIZ POINTS SYSTEM - Google Apps Script
- * Matches rules from the provided image:
- * - Enroll fee $1 = 100 pts
- * - Unlock codes (example 5E42C) give free pts after activation + % fee deduction
- * - Each question costs 10 pts (admin can set custom amount)
+ * Rules:
+ * - User registers with 0 points (NO free points)
+ * - User must pay $1 (PayPal etc.) OR receive a manual Unlock# from admin
+ * - Activating Unlock# grants the enrollment points (default 100) and/or bonus
+ * - Each question costs points (admin sets amount, default 10)
  * - Only 2 tries allowed
  * - Correct on 1st try = full points
  * - Correct on 2nd try = half points
@@ -13,6 +14,7 @@
 // ==================== CONFIG ====================
 const SPREADSHEET_ID = SpreadsheetApp.getActiveSpreadsheet().getId(); // works when bound
 const ADMIN_PASSWORD = 'admin123'; // CHANGE THIS!
+const PAYPAL_EMAIL = 'your-paypal@email.com'; // CHANGE THIS – shown to users for payment
 
 // ==================== SHEET NAMES ====================
 const SHEETS = {
@@ -69,17 +71,20 @@ function setupAllSheets() {
   }
   
   // ----- Unlock Codes -----
+  // Type: ENROLL = grants starting points after payment | BONUS = extra after enrolled
   sheet = ss.getSheetByName(SHEETS.UNLOCK_CODES);
   if (!sheet) {
     sheet = ss.insertSheet(SHEETS.UNLOCK_CODES);
     sheet.appendRow([
-      'Code', 'BonusPoints', 'FeePercent', 'MaxUses', 'UsedCount', 'Active', 'CreatedAt', 'Notes'
+      'Code', 'Type', 'BonusPoints', 'FeePercent', 'MaxUses', 'UsedCount', 'Active', 'CreatedAt', 'Notes'
     ]);
-    sheet.getRange(1, 1, 1, 8).setFontWeight('bold');
+    sheet.getRange(1, 1, 1, 9).setFontWeight('bold');
     sheet.setFrozenRows(1);
     
-    // Example from image: 5E42C → 15 free pts, ~33.33% fee
-    sheet.appendRow(['5E42C', 15, 33.33, 1, 0, 'YES', new Date(), 'Example from requirements']);
+    // Example enrollment unlock (admin gives this after user pays $1)
+    sheet.appendRow(['5E42C', 'ENROLL', 100, 0, 1, 0, 'YES', new Date(), 'Enrollment unlock – grants 100 pts after $1 payment']);
+    // Example bonus unlock
+    sheet.appendRow(['BONUS15', 'BONUS', 15, 33.33, 5, 0, 'YES', new Date(), 'Bonus +15 pts then 33.33% fee']);
   }
   
   // ----- Attempts -----
@@ -102,11 +107,11 @@ function setupAllSheets() {
     sheet.getRange(1, 1, 1, 3).setFontWeight('bold');
     sheet.setFrozenRows(1);
     
-    sheet.appendRow(['ENROLL_FEE_USD', '1', 'Enrollment fee in USD']);
-    sheet.appendRow(['ENROLL_POINTS', '100', 'Points given on enrollment ($1 = 100pts)']);
+    sheet.appendRow(['ENROLL_FEE_USD', '1', 'Enrollment fee in USD (user pays via PayPal)']);
+    sheet.appendRow(['ENROLL_POINTS', '100', 'Points granted when ENROLL unlock code is activated']);
     sheet.appendRow(['DEFAULT_QUESTION_POINTS', '10', 'Default points per question']);
     sheet.appendRow(['MAX_TRIES', '2', 'Maximum attempts per question']);
-    sheet.appendRow(['ADMIN_FEE_POINTS', '10', 'Admin fee deducted in some unlock scenarios']);
+    sheet.appendRow(['PAYPAL_EMAIL', PAYPAL_EMAIL, 'PayPal email shown to users for payment']);
   }
   
   // ----- Activity Log -----
@@ -179,7 +184,10 @@ function generateId(prefix) {
 // ==================== USER FUNCTIONS ====================
 
 /**
- * Enroll a new user. Gives 100 points for $1 fee.
+ * Register a new user.
+ * Starts with 0 points and status PENDING.
+ * User must pay $1 (PayPal) then activate an Unlock# given by admin
+ * (or admin manually grants points).
  */
 function enrollUser(name, email) {
   if (!name || !name.trim()) throw new Error('Name is required');
@@ -196,30 +204,34 @@ function enrollUser(name, email) {
     }
   }
   
-  const settings = getSettings();
-  const enrollPts = Number(settings.ENROLL_POINTS) || 100;
   const userId = generateId('U');
   
+  // 0 points, not enrolled yet, status PENDING_PAYMENT
   sheet.appendRow([
     userId,
     name.trim(),
     email || '',
-    enrollPts,
-    'YES',
-    '',
+    0,                 // Points = 0 (must pay + unlock)
+    'NO',              // Enrolled = NO until unlock activated
+    '',                // UnlockCodeUsed
     new Date(),
     new Date(),
-    'ACTIVE'
+    'PENDING'          // Must pay $1 then activate Unlock#
   ]);
   
-  logActivity(userId, 'ENROLL', `User enrolled: ${name}`, enrollPts);
+  logActivity(userId, 'REGISTER', `User registered (pending payment): ${name}`, 0);
+  
+  const settings = getSettings();
+  const paypal = settings.PAYPAL_EMAIL || PAYPAL_EMAIL;
+  const fee = settings.ENROLL_FEE_USD || '1';
   
   return {
     success: true,
     userId: userId,
     name: name.trim(),
-    points: enrollPts,
-    message: `Enrolled successfully! You received ${enrollPts} points.`
+    points: 0,
+    status: 'PENDING',
+    message: `Registered! You have 0 points. Pay $${fee} via PayPal to ${paypal}, then enter the Unlock# that admin gives you.`
   };
 }
 
@@ -240,7 +252,7 @@ function getUser(userIdOrName) {
         points: Number(data[i][3]),
         enrolled: data[i][4],
         unlockCodeUsed: data[i][5],
-        status: data[i][8]
+        status: data[i][8] || 'PENDING'
       };
     }
   }
@@ -248,71 +260,118 @@ function getUser(userIdOrName) {
 }
 
 /**
- * Activate an Unlock Code (example: 5E42C)
- * Gives bonus points and applies fee %
+ * Activate an Unlock Code.
+ * Types:
+ *   ENROLL – grants enrollment points (after user paid $1). Sets status ACTIVE.
+ *   BONUS  – extra points + optional fee % (user must already be ACTIVE).
+ * Admin can also give codes manually after verifying PayPal payment.
  */
 function activateUnlockCode(userId, code) {
   const user = getUser(userId);
   if (!user) throw new Error('User not found');
-  if (user.unlockCodeUsed) throw new Error('You already used an unlock code');
   
   const sheet = getSheet(SHEETS.UNLOCK_CODES);
   const data = sheet.getDataRange().getValues();
   
+  // Columns: 0=Code, 1=Type, 2=BonusPoints, 3=FeePercent, 4=MaxUses, 5=UsedCount, 6=Active, 7=CreatedAt, 8=Notes
   let codeRow = -1;
+  let codeType = 'BONUS';
   let bonus = 0;
   let feePercent = 0;
   
   for (let i = 1; i < data.length; i++) {
     if (String(data[i][0]).toUpperCase() === String(code).toUpperCase()) {
-      if (data[i][5] !== 'YES') throw new Error('This unlock code is inactive');
-      if (Number(data[i][4]) >= Number(data[i][3])) throw new Error('Unlock code has reached max uses');
+      if (data[i][6] !== 'YES') throw new Error('This unlock code is inactive');
+      if (Number(data[i][5]) >= Number(data[i][4])) throw new Error('Unlock code has reached max uses');
       
       codeRow = i + 1;
-      bonus = Number(data[i][1]) || 0;
-      feePercent = Number(data[i][2]) || 0;
+      codeType = String(data[i][1] || 'BONUS').toUpperCase();
+      bonus = Number(data[i][2]) || 0;
+      feePercent = Number(data[i][3]) || 0;
       break;
     }
   }
   
   if (codeRow === -1) throw new Error('Invalid unlock code');
   
-  // Calculate: add bonus, then subtract fee % of current points (or of bonus)
-  // From image: "after activation user gets free 15pts and subtract -33.33%"
-  // and "10pts admin fee user remains on 5pts"
   const currentPts = user.points;
-  const feeAmount = Math.round((currentPts + bonus) * (feePercent / 100) * 100) / 100;
-  // Alternative interpretation matching "10pts admin fee → remains on 5pts" when starting from ~15:
-  // We will do: add bonus first, then deduct feePercent of the NEW total, then optionally admin fee.
+  let newPoints = currentPts;
+  let percentDeduction = 0;
+  let message = '';
   
-  let newPoints = currentPts + bonus;
-  const percentDeduction = Math.round(newPoints * (feePercent / 100) * 100) / 100;
-  newPoints = Math.max(0, newPoints - percentDeduction);
-  
-  // Update user
-  const usersSheet = getSheet(SHEETS.USERS);
-  const usersData = usersSheet.getDataRange().getValues();
-  for (let i = 1; i < usersData.length; i++) {
-    if (usersData[i][0] === userId) {
-      usersSheet.getRange(i + 1, 4).setValue(newPoints);          // Points
-      usersSheet.getRange(i + 1, 6).setValue(code.toUpperCase()); // UnlockCodeUsed
-      usersSheet.getRange(i + 1, 8).setValue(new Date());         // LastActive
-      break;
+  if (codeType === 'ENROLL') {
+    // Enrollment unlock – user paid $1, now grant starting points
+    if (user.enrolled === 'YES' || user.status === 'ACTIVE') {
+      throw new Error('You are already enrolled. Use a BONUS unlock code instead.');
     }
+    
+    newPoints = currentPts + bonus; // usually 100
+    // Optional fee on enrollment (normally 0)
+    if (feePercent > 0) {
+      percentDeduction = Math.round(newPoints * (feePercent / 100) * 100) / 100;
+      newPoints = Math.max(0, newPoints - percentDeduction);
+    }
+    
+    // Update user → mark enrolled + ACTIVE
+    const usersSheet = getSheet(SHEETS.USERS);
+    const usersData = usersSheet.getDataRange().getValues();
+    for (let i = 1; i < usersData.length; i++) {
+      if (usersData[i][0] === userId) {
+        usersSheet.getRange(i + 1, 4).setValue(newPoints);          // Points
+        usersSheet.getRange(i + 1, 5).setValue('YES');              // Enrolled
+        usersSheet.getRange(i + 1, 6).setValue(code.toUpperCase()); // UnlockCodeUsed
+        usersSheet.getRange(i + 1, 8).setValue(new Date());         // LastActive
+        usersSheet.getRange(i + 1, 9).setValue('ACTIVE');           // Status
+        break;
+      }
+    }
+    
+    message = `Enrollment unlocked! +${bonus} pts. You are now ACTIVE. Balance: ${newPoints} pts`;
+    logActivity(userId, 'ENROLL_UNLOCK', `Activated ENROLL code ${code}. +${bonus} pts`, newPoints - currentPts);
+    
+  } else {
+    // BONUS unlock – extra points after already enrolled
+    if (user.status !== 'ACTIVE' && user.enrolled !== 'YES') {
+      throw new Error('You must complete enrollment (pay $1 + activate ENROLL unlock) first.');
+    }
+    
+    newPoints = currentPts + bonus;
+    if (feePercent > 0) {
+      percentDeduction = Math.round(newPoints * (feePercent / 100) * 100) / 100;
+      newPoints = Math.max(0, newPoints - percentDeduction);
+    }
+    
+    // Update points only (keep existing unlock record or append)
+    const usersSheet = getSheet(SHEETS.USERS);
+    const usersData = usersSheet.getDataRange().getValues();
+    for (let i = 1; i < usersData.length; i++) {
+      if (usersData[i][0] === userId) {
+        usersSheet.getRange(i + 1, 4).setValue(newPoints);
+        // Append code to UnlockCodeUsed if already has one
+        const prev = usersData[i][5] ? usersData[i][5] + ', ' : '';
+        usersSheet.getRange(i + 1, 6).setValue(prev + code.toUpperCase());
+        usersSheet.getRange(i + 1, 8).setValue(new Date());
+        break;
+      }
+    }
+    
+    message = `Bonus unlocked! +${bonus} pts` +
+      (feePercent > 0 ? `, then -${feePercent}% fee (-${percentDeduction})` : '') +
+      `. New balance: ${newPoints} pts`;
+    logActivity(userId, 'BONUS_UNLOCK', `Activated BONUS code ${code}. +${bonus}, fee ${feePercent}%`, newPoints - currentPts);
   }
   
-  // Increment used count
-  sheet.getRange(codeRow, 5).setValue(Number(data[codeRow - 1][4]) + 1);
-  
-  logActivity(userId, 'UNLOCK', `Activated code ${code}. Bonus +${bonus}, fee ${feePercent}% (-${percentDeduction})`, newPoints - currentPts);
+  // Increment used count (column 6 = UsedCount, index 5)
+  sheet.getRange(codeRow, 6).setValue(Number(data[codeRow - 1][5]) + 1);
   
   return {
     success: true,
+    type: codeType,
     bonus: bonus,
     feePercent: feePercent,
     pointsDeducted: percentDeduction,
     newPoints: newPoints,
-    message: `Unlock successful! +${bonus} pts, then -${feePercent}% fee. New balance: ${newPoints} pts`
+    message: message
   };
 }
 
@@ -588,10 +647,16 @@ function adminToggleQuestion(questionId, adminPass) {
 
 /**
  * Admin: Create unlock code
+ * type = 'ENROLL' (grants starting pts after payment) or 'BONUS'
  */
-function adminCreateUnlockCode(code, bonusPoints, feePercent, maxUses, notes, adminPass) {
+function adminCreateUnlockCode(code, type, bonusPoints, feePercent, maxUses, notes, adminPass) {
   if (!adminLogin(adminPass)) throw new Error('Unauthorized');
   if (!code) throw new Error('Code is required');
+  
+  const codeType = (type || 'ENROLL').toUpperCase();
+  if (codeType !== 'ENROLL' && codeType !== 'BONUS') {
+    throw new Error('Type must be ENROLL or BONUS');
+  }
   
   const sheet = getSheet(SHEETS.UNLOCK_CODES);
   const data = sheet.getDataRange().getValues();
@@ -602,10 +667,15 @@ function adminCreateUnlockCode(code, bonusPoints, feePercent, maxUses, notes, ad
     }
   }
   
+  // Default: ENROLL → 100 pts, BONUS → 15 pts
+  const pts = Number(bonusPoints) || (codeType === 'ENROLL' ? 100 : 15);
+  const fee = Number(feePercent) || 0;
+  
   sheet.appendRow([
     code.toUpperCase(),
-    Number(bonusPoints) || 15,
-    Number(feePercent) || 33.33,
+    codeType,
+    pts,
+    fee,
     Number(maxUses) || 1,
     0,
     'YES',
@@ -613,7 +683,7 @@ function adminCreateUnlockCode(code, bonusPoints, feePercent, maxUses, notes, ad
     notes || ''
   ]);
   
-  return { success: true, message: 'Unlock code created' };
+  return { success: true, message: `${codeType} unlock code created (+${pts} pts)` };
 }
 
 /**
@@ -655,6 +725,46 @@ function adminAdjustPoints(userId, delta, reason, adminPass) {
 }
 
 /**
+ * Admin: Manually confirm payment & activate user (grants enrollment points)
+ * Use this after verifying PayPal payment instead of giving an Unlock#.
+ */
+function adminConfirmPayment(userId, adminPass) {
+  if (!adminLogin(adminPass)) throw new Error('Unauthorized');
+  
+  const user = getUser(userId);
+  if (!user) throw new Error('User not found');
+  if (user.status === 'ACTIVE' && user.enrolled === 'YES') {
+    throw new Error('User is already active/enrolled');
+  }
+  
+  const settings = getSettings();
+  const enrollPts = Number(settings.ENROLL_POINTS) || 100;
+  
+  const sheet = getSheet(SHEETS.USERS);
+  const data = sheet.getDataRange().getValues();
+  
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] === userId) {
+      const newPts = Number(data[i][3]) + enrollPts;
+      sheet.getRange(i + 1, 4).setValue(newPts);       // Points
+      sheet.getRange(i + 1, 5).setValue('YES');         // Enrolled
+      sheet.getRange(i + 1, 6).setValue('MANUAL');      // UnlockCodeUsed
+      sheet.getRange(i + 1, 8).setValue(new Date());    // LastActive
+      sheet.getRange(i + 1, 9).setValue('ACTIVE');      // Status
+      
+      logActivity(userId, 'ADMIN_CONFIRM_PAYMENT', `Admin confirmed payment. +${enrollPts} pts`, enrollPts);
+      
+      return {
+        success: true,
+        newPoints: newPts,
+        message: `Payment confirmed. User is now ACTIVE with ${newPts} pts.`
+      };
+    }
+  }
+  throw new Error('User not found');
+}
+
+/**
  * Admin: Get unlock codes
  */
 function adminGetUnlockCodes(adminPass) {
@@ -664,15 +774,17 @@ function adminGetUnlockCodes(adminPass) {
   const data = sheet.getDataRange().getValues();
   const list = [];
   
+  // Columns: 0=Code, 1=Type, 2=BonusPoints, 3=FeePercent, 4=MaxUses, 5=UsedCount, 6=Active, 7=CreatedAt, 8=Notes
   for (let i = 1; i < data.length; i++) {
     list.push({
       code: data[i][0],
-      bonusPoints: Number(data[i][1]),
-      feePercent: Number(data[i][2]),
-      maxUses: Number(data[i][3]),
-      usedCount: Number(data[i][4]),
-      active: data[i][5],
-      notes: data[i][7]
+      type: data[i][1] || 'BONUS',
+      bonusPoints: Number(data[i][2]),
+      feePercent: Number(data[i][3]),
+      maxUses: Number(data[i][4]),
+      usedCount: Number(data[i][5]),
+      active: data[i][6],
+      notes: data[i][8]
     });
   }
   return list;

@@ -226,7 +226,7 @@
                 </tr>
               </thead>
               <tbody id="qTableBody">
-                <tr><td colspan="6" style="text-align:center; color:var(--muted);">Loading...</td></tr>
+                <tr><td colspan="7" style="text-align:center; color:var(--muted);">Loading...</td></tr>
               </tbody>
             </table>
           </div>
@@ -238,18 +238,29 @@
         <div class="card">
           <h2>➕ Create Unlock Code</h2>
           <div id="codeMsg"></div>
+          <p style="font-size:0.85rem; color:var(--muted); margin-bottom:12px;">
+            <strong>ENROLL</strong> = after user pays $1 → grants starting points (usually 100).<br>
+            <strong>BONUS</strong> = extra points for already-active users.
+          </p>
           <div class="grid-2">
             <div>
               <label>Code *</label>
               <input type="text" id="codeValue" placeholder="5E42C">
             </div>
             <div>
-              <label>Bonus Points</label>
-              <input type="number" id="codeBonus" value="15" min="0">
+              <label>Type *</label>
+              <select id="codeType">
+                <option value="ENROLL" selected>ENROLL (after $1 payment)</option>
+                <option value="BONUS">BONUS (extra pts)</option>
+              </select>
+            </div>
+            <div>
+              <label>Points to Grant</label>
+              <input type="number" id="codeBonus" value="100" min="0">
             </div>
             <div>
               <label>Fee Percent (%)</label>
-              <input type="number" id="codeFee" value="33.33" min="0" max="100" step="0.01">
+              <input type="number" id="codeFee" value="0" min="0" max="100" step="0.01">
             </div>
             <div>
               <label>Max Uses</label>
@@ -257,7 +268,7 @@
             </div>
           </div>
           <label>Notes</label>
-          <input type="text" id="codeNotes" placeholder="Optional note">
+          <input type="text" id="codeNotes" placeholder="e.g. For user John after PayPal payment">
           <button class="btn btn-success" onclick="createCode()">Create Code</button>
         </div>
 
@@ -268,7 +279,8 @@
               <thead>
                 <tr>
                   <th>Code</th>
-                  <th>Bonus</th>
+                  <th>Type</th>
+                  <th>Points</th>
                   <th>Fee %</th>
                   <th>Uses</th>
                   <th>Active</th>
@@ -435,6 +447,7 @@
     // ---------- Unlock Codes ----------
     function createCode() {
       const code = document.getElementById('codeValue').value.trim();
+      const type = document.getElementById('codeType').value;
       const bonus = document.getElementById('codeBonus').value;
       const fee = document.getElementById('codeFee').value;
       const maxUses = document.getElementById('codeMaxUses').value;
@@ -452,7 +465,7 @@
           loadCodes();
         })
         .withFailureHandler(err => showMsg('codeMsg', err.message, 'error'))
-        .adminCreateUnlockCode(code, bonus, fee, maxUses, notes, adminPass);
+        .adminCreateUnlockCode(code, type, bonus, fee, maxUses, notes, adminPass);
     }
 
     function loadCodes() {
@@ -460,12 +473,13 @@
         .withSuccessHandler(list => {
           const tbody = document.getElementById('codeTableBody');
           if (!list.length) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--muted);">No codes yet</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);">No codes yet</td></tr>';
             return;
           }
           tbody.innerHTML = list.map(c => `
             <tr>
               <td><code>${c.code}</code></td>
+              <td><span class="badge badge-${c.type === 'ENROLL' ? 'yes' : 'no'}">${c.type}</span></td>
               <td>+${c.bonusPoints}</td>
               <td>${c.feePercent}%</td>
               <td>${c.usedCount} / ${c.maxUses}</td>
@@ -492,7 +506,12 @@
             tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--muted);">No users yet</td></tr>';
             return;
           }
-          tbody.innerHTML = list.map(u => `
+          tbody.innerHTML = list.map(u => {
+            const isPending = u.status !== 'ACTIVE';
+            const confirmBtn = isPending
+              ? `<button class="btn btn-sm btn-success" onclick="confirmPay('${u.userId}')" title="Confirm $1 payment & grant 100 pts">✓ Confirm Pay</button>`
+              : '';
+            return `
             <tr>
               <td><code>${u.userId}</code></td>
               <td>${escapeHtml(u.name)}</td>
@@ -501,13 +520,25 @@
               <td>${u.unlockCodeUsed || '—'}</td>
               <td><span class="badge badge-${u.status === 'ACTIVE' ? 'yes' : 'no'}">${u.status}</span></td>
               <td>
+                ${confirmBtn}
                 <input type="number" id="adj-${u.userId}" placeholder="±pts" style="width:70px; margin:0; padding:5px 8px; display:inline-block;">
                 <button class="btn btn-sm btn-primary" onclick="adjustPts('${u.userId}')">Set</button>
               </td>
-            </tr>
-          `).join('');
+            </tr>`;
+          }).join('');
         })
         .adminGetUsers(adminPass);
+    }
+
+    function confirmPay(userId) {
+      if (!confirm('Confirm that this user paid $1 and grant enrollment points?')) return;
+      google.script.run
+        .withSuccessHandler(res => {
+          showMsg('usersMsg', res.message, 'success');
+          loadUsers();
+        })
+        .withFailureHandler(err => showMsg('usersMsg', err.message, 'error'))
+        .adminConfirmPayment(userId, adminPass);
     }
 
     function adjustPts(userId) {

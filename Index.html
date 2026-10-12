@@ -155,7 +155,7 @@
 <body>
   <header>
     <h1>🎯 Quiz Points System</h1>
-    <p>$1 enrollment = 100 pts · 2 tries max · Half credit on 2nd try</p>
+    <p>Pay $1 → Unlock# → 100 pts · 2 tries max · Half credit on 2nd try</p>
   </header>
 
   <div class="container">
@@ -171,7 +171,7 @@
           <label>Email (optional)</label>
           <input type="email" id="enrollEmail" placeholder="you@email.com">
           <button class="btn btn-primary btn-block" onclick="doEnroll()">
-            Enroll Now ($1 = 100 pts)
+            Register (free – no points yet)
           </button>
         </div>
         
@@ -185,12 +185,12 @@
       <div class="card rules">
         <strong>How it works:</strong>
         <ul style="margin-top:8px; padding-left:18px;">
-          <li>Enroll → receive <strong>100 points</strong></li>
-          <li>Activate an Unlock Code (from admin) for bonus pts</li>
+          <li><strong>1. Register</strong> – free, starts with <strong>0 points</strong></li>
+          <li><strong>2. Pay $1</strong> via PayPal (details shown after register)</li>
+          <li><strong>3. Admin gives you an Unlock#</strong> (or confirms payment)</li>
+          <li><strong>4. Activate Unlock#</strong> → receive <strong>100 points</strong></li>
           <li>Each question costs points (default 10)</li>
-          <li>Correct on 1st try = full points</li>
-          <li>Correct on 2nd try = half points</li>
-          <li>Only 2 tries allowed per question</li>
+          <li>Correct on 1st try = full pts · 2nd try = half pts · Only 2 tries</li>
         </ul>
       </div>
     </div>
@@ -209,6 +209,21 @@
         <button class="btn btn-outline" style="margin-top:14px; font-size:0.85rem; padding:8px 14px;" onclick="logout()">Logout</button>
       </div>
 
+      <!-- Payment / Unlock notice for PENDING users -->
+      <div class="card" id="pendingCard" style="display:none; border-color:#f59e0b; background:#fffbeb;">
+        <h2 style="color:#b45309;">⏳ Payment Required</h2>
+        <p style="margin-bottom:10px;">You have <strong>0 points</strong> until you pay and activate an Unlock#.</p>
+        <ol style="padding-left:18px; font-size:0.95rem; color:#78350f;">
+          <li>Pay <strong>$1</strong> via PayPal (admin will show the email after you register)</li>
+          <li>Contact admin / send payment screenshot</li>
+          <li>Admin gives you an <strong>Unlock#</strong></li>
+          <li>Enter the Unlock# below → receive <strong>100 points</strong></li>
+        </ol>
+        <p style="font-size:0.85rem; color:#92400e; margin-top:8px;">
+          Or admin can confirm your payment manually without a code.
+        </p>
+      </div>
+
       <!-- Unlock Code -->
       <div class="card" id="unlockCard">
         <h2>🔓 Activate Unlock Code</h2>
@@ -217,8 +232,8 @@
           <input type="text" id="unlockCode" placeholder="e.g. 5E42C" style="margin-bottom:0;">
           <button class="btn btn-success" onclick="doUnlock()">Activate</button>
         </div>
-        <p style="font-size:0.85rem; color:var(--muted); margin-top:10px;">
-          Example: code <strong>5E42C</strong> gives +15 pts then applies ~33.33% fee.
+        <p style="font-size:0.85rem; color:var(--muted); margin-top:10px;" id="unlockHint">
+          After paying $1, enter the Unlock# admin gives you to get your 100 points.
         </p>
       </div>
 
@@ -249,10 +264,10 @@
       
       google.script.run
         .withSuccessHandler(res => {
-          currentUser = { userId: res.userId, name: res.name, points: res.points };
+          currentUser = { userId: res.userId, name: res.name, points: res.points, status: res.status || 'PENDING' };
           localStorage.setItem('quizUserId', res.userId);
           showMsg('authMsg', res.message, 'success');
-          setTimeout(() => loadDashboard(), 800);
+          setTimeout(() => loadDashboard(), 1200);
         })
         .withFailureHandler(err => showMsg('authMsg', err.message, 'error'))
         .enrollUser(name, email);
@@ -295,19 +310,36 @@
       document.getElementById('userIdDisplay').textContent = 'ID: ' + currentUser.userId;
       document.getElementById('pointsDisplay').textContent = '⭐ ' + currentUser.points + ' pts';
       
-      if (currentUser.unlockCodeUsed) {
-        document.getElementById('unlockCard').classList.add('hidden');
-      }
-      
       google.script.run
         .withSuccessHandler(data => {
           dashboardData = data;
           currentUser = data.user;
           document.getElementById('pointsDisplay').textContent = '⭐ ' + data.user.points + ' pts';
-          if (data.user.unlockCodeUsed) {
-            document.getElementById('unlockCard').classList.add('hidden');
+          
+          const isPending = data.user.status === 'PENDING' || data.user.enrolled !== 'YES';
+          const pendingCard = document.getElementById('pendingCard');
+          const unlockCard = document.getElementById('unlockCard');
+          
+          if (isPending) {
+            pendingCard.style.display = 'block';
+            unlockCard.style.display = 'block';
+            document.getElementById('unlockHint').textContent =
+              'After paying $1, enter the Unlock# admin gives you to get your 100 points.';
+          } else {
+            pendingCard.style.display = 'none';
+            // Still allow BONUS unlock codes after enrolled
+            unlockCard.style.display = 'block';
+            document.getElementById('unlockHint').textContent =
+              'Enter a BONUS Unlock# for extra points (optional).';
           }
-          renderQuestions(data.questions, data.attempts);
+          
+          // Only show questions if ACTIVE
+          if (isPending) {
+            document.getElementById('questionsList').innerHTML =
+              '<p style="color:var(--muted); text-align:center; padding:16px;">Complete payment + Unlock# first to answer questions.</p>';
+          } else {
+            renderQuestions(data.questions, data.attempts);
+          }
         })
         .withFailureHandler(err => showMsg('questionsMsg', err.message, 'error'))
         .getUserDashboard(currentUser.userId);
@@ -403,9 +435,8 @@
           showMsg('unlockMsg', res.message, 'success');
           currentUser.points = res.newPoints;
           document.getElementById('pointsDisplay').textContent = '⭐ ' + res.newPoints + ' pts';
-          setTimeout(() => {
-            document.getElementById('unlockCard').classList.add('hidden');
-          }, 2000);
+          // Reload full dashboard so PENDING → ACTIVE transition shows questions
+          setTimeout(() => loadDashboard(), 1500);
         })
         .withFailureHandler(err => showMsg('unlockMsg', err.message, 'error'))
         .activateUnlockCode(currentUser.userId, code);
