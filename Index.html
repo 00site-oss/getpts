@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quiz Points System</title>
+  <style>
+    :root {
+      --primary: #4f46e5;
+      --primary-dark: #4338ca;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --text: #1e293b;
+      --muted: #64748b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    .container { max-width: 720px; margin: 0 auto; padding: 20px; }
+    header {
+      background: linear-gradient(135deg, var(--primary), #7c3aed);
+      color: white;
+      padding: 24px 20px;
+      text-align: center;
+      border-radius: 0 0 20px 20px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 20px rgba(79,70,229,0.3);
+    }
+    header h1 { font-size: 1.6rem; font-weight: 700; }
+    header p { opacity: 0.9; font-size: 0.95rem; margin-top: 4px; }
+    .card {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+      border: 1px solid #e2e8f0;
+    }
+    .card h2 {
+      font-size: 1.15rem;
+      margin-bottom: 16px;
+      color: var(--primary);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    label { display: block; font-weight: 600; font-size: 0.9rem; margin-bottom: 6px; color: var(--muted); }
+    input, textarea, select {
+      width: 100%;
+      padding: 12px 14px;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 10px;
+      font-size: 1rem;
+      margin-bottom: 14px;
+      transition: border 0.2s;
+    }
+    input:focus, textarea:focus { outline: none; border-color: var(--primary); }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 12px 20px;
+      border: none;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-success { background: var(--success); color: white; }
+    .btn-danger { background: var(--danger); color: white; }
+    .btn-outline {
+      background: transparent;
+      border: 1.5px solid var(--primary);
+      color: var(--primary);
+    }
+    .btn-block { width: 100%; }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .points-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #eef2ff;
+      color: var(--primary);
+      padding: 8px 16px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 1.1rem;
+    }
+    .hidden { display: none !important; }
+    .msg {
+      padding: 12px 16px;
+      border-radius: 10px;
+      margin-bottom: 16px;
+      font-size: 0.95rem;
+    }
+    .msg-success { background: #d1fae5; color: #065f46; }
+    .msg-error { background: #fee2e2; color: #991b1b; }
+    .msg-info { background: #e0e7ff; color: #3730a3; }
+    .question-item {
+      border: 1.5px solid #e2e8f0;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 12px;
+      transition: border 0.2s;
+    }
+    .question-item:hover { border-color: #c7d2fe; }
+    .question-item.done { background: #f0fdf4; border-color: #86efac; }
+    .question-item.failed { background: #fef2f2; border-color: #fca5a5; }
+    .q-meta { font-size: 0.85rem; color: var(--muted); margin-top: 6px; }
+    .status-tag {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .tag-correct { background: #d1fae5; color: #065f46; }
+    .tag-half { background: #fef3c7; color: #92400e; }
+    .tag-wrong { background: #fee2e2; color: #991b1b; }
+    .tag-open { background: #e0e7ff; color: #3730a3; }
+    .flex { display: flex; gap: 10px; align-items: center; }
+    .flex-between { display: flex; justify-content: space-between; align-items: center; }
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2.5px solid #e2e8f0;
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .rules {
+      background: #f1f5f9;
+      border-radius: 10px;
+      padding: 14px 16px;
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+    .rules li { margin-bottom: 4px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🎯 Quiz Points System</h1>
+    <p>$1 enrollment = 100 pts · 2 tries max · Half credit on 2nd try</p>
+  </header>
+
+  <div class="container">
+    <!-- ===== LOGIN / ENROLL ===== -->
+    <div id="authSection">
+      <div class="card">
+        <h2>👤 Enroll or Continue</h2>
+        <div id="authMsg"></div>
+        
+        <div id="enrollForm">
+          <label>Your Name *</label>
+          <input type="text" id="enrollName" placeholder="Enter your name">
+          <label>Email (optional)</label>
+          <input type="email" id="enrollEmail" placeholder="you@email.com">
+          <button class="btn btn-primary btn-block" onclick="doEnroll()">
+            Enroll Now ($1 = 100 pts)
+          </button>
+        </div>
+        
+        <hr style="margin: 20px 0; border: none; border-top: 1px solid #e2e8f0;">
+        
+        <label>Already enrolled? Enter your User ID or Name</label>
+        <input type="text" id="loginId" placeholder="User ID or Name">
+        <button class="btn btn-outline btn-block" onclick="doLogin()">Continue</button>
+      </div>
+      
+      <div class="card rules">
+        <strong>How it works:</strong>
+        <ul style="margin-top:8px; padding-left:18px;">
+          <li>Enroll → receive <strong>100 points</strong></li>
+          <li>Activate an Unlock Code (from admin) for bonus pts</li>
+          <li>Each question costs points (default 10)</li>
+          <li>Correct on 1st try = full points</li>
+          <li>Correct on 2nd try = half points</li>
+          <li>Only 2 tries allowed per question</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- ===== DASHBOARD ===== -->
+    <div id="dashSection" class="hidden">
+      <div class="card">
+        <div class="flex-between">
+          <div>
+            <div style="font-size:0.9rem; color:var(--muted);">Welcome back</div>
+            <div style="font-size:1.25rem; font-weight:700;" id="userName">—</div>
+            <div style="font-size:0.8rem; color:var(--muted);" id="userIdDisplay"></div>
+          </div>
+          <div class="points-badge" id="pointsDisplay">⭐ 0 pts</div>
+        </div>
+        <button class="btn btn-outline" style="margin-top:14px; font-size:0.85rem; padding:8px 14px;" onclick="logout()">Logout</button>
+      </div>
+
+      <!-- Unlock Code -->
+      <div class="card" id="unlockCard">
+        <h2>🔓 Activate Unlock Code</h2>
+        <div id="unlockMsg"></div>
+        <div class="flex">
+          <input type="text" id="unlockCode" placeholder="e.g. 5E42C" style="margin-bottom:0;">
+          <button class="btn btn-success" onclick="doUnlock()">Activate</button>
+        </div>
+        <p style="font-size:0.85rem; color:var(--muted); margin-top:10px;">
+          Example: code <strong>5E42C</strong> gives +15 pts then applies ~33.33% fee.
+        </p>
+      </div>
+
+      <!-- Questions -->
+      <div class="card">
+        <h2>📝 Questions</h2>
+        <div id="questionsMsg"></div>
+        <div id="questionsList">
+          <div style="text-align:center; padding:20px; color:var(--muted);">
+            <div class="spinner"></div> Loading questions...
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentUser = null;
+    let dashboardData = null;
+
+    // ---------- Auth ----------
+    function doEnroll() {
+      const name = document.getElementById('enrollName').value.trim();
+      const email = document.getElementById('enrollEmail').value.trim();
+      if (!name) { showMsg('authMsg', 'Please enter your name', 'error'); return; }
+      
+      showMsg('authMsg', '<span class="spinner"></span> Enrolling...', 'info');
+      
+      google.script.run
+        .withSuccessHandler(res => {
+          currentUser = { userId: res.userId, name: res.name, points: res.points };
+          localStorage.setItem('quizUserId', res.userId);
+          showMsg('authMsg', res.message, 'success');
+          setTimeout(() => loadDashboard(), 800);
+        })
+        .withFailureHandler(err => showMsg('authMsg', err.message, 'error'))
+        .enrollUser(name, email);
+    }
+
+    function doLogin() {
+      const id = document.getElementById('loginId').value.trim();
+      if (!id) { showMsg('authMsg', 'Enter User ID or Name', 'error'); return; }
+      
+      showMsg('authMsg', '<span class="spinner"></span> Looking up...', 'info');
+      
+      google.script.run
+        .withSuccessHandler(user => {
+          if (!user) {
+            showMsg('authMsg', 'User not found. Please enroll first.', 'error');
+            return;
+          }
+          currentUser = user;
+          localStorage.setItem('quizUserId', user.userId);
+          loadDashboard();
+        })
+        .withFailureHandler(err => showMsg('authMsg', err.message, 'error'))
+        .getUser(id);
+    }
+
+    function logout() {
+      localStorage.removeItem('quizUserId');
+      currentUser = null;
+      document.getElementById('authSection').classList.remove('hidden');
+      document.getElementById('dashSection').classList.add('hidden');
+    }
+
+    // ---------- Dashboard ----------
+    function loadDashboard() {
+      if (!currentUser) return;
+      
+      document.getElementById('authSection').classList.add('hidden');
+      document.getElementById('dashSection').classList.remove('hidden');
+      document.getElementById('userName').textContent = currentUser.name;
+      document.getElementById('userIdDisplay').textContent = 'ID: ' + currentUser.userId;
+      document.getElementById('pointsDisplay').textContent = '⭐ ' + currentUser.points + ' pts';
+      
+      if (currentUser.unlockCodeUsed) {
+        document.getElementById('unlockCard').classList.add('hidden');
+      }
+      
+      google.script.run
+        .withSuccessHandler(data => {
+          dashboardData = data;
+          currentUser = data.user;
+          document.getElementById('pointsDisplay').textContent = '⭐ ' + data.user.points + ' pts';
+          if (data.user.unlockCodeUsed) {
+            document.getElementById('unlockCard').classList.add('hidden');
+          }
+          renderQuestions(data.questions, data.attempts);
+        })
+        .withFailureHandler(err => showMsg('questionsMsg', err.message, 'error'))
+        .getUserDashboard(currentUser.userId);
+    }
+
+    function renderQuestions(questions, attempts) {
+      const list = document.getElementById('questionsList');
+      if (!questions.length) {
+        list.innerHTML = '<p style="color:var(--muted);">No active questions yet.</p>';
+        return;
+      }
+      
+      const attemptMap = {};
+      attempts.forEach(a => attemptMap[a.questionId] = a);
+      
+      let html = '';
+      questions.forEach(q => {
+        const att = attemptMap[q.questionId];
+        let statusClass = '';
+        let statusTag = '<span class="status-tag tag-open">Open</span>';
+        let triesInfo = '0 / 2 tries';
+        let canAnswer = true;
+        let pointsInfo = q.points + ' pts';
+        
+        if (att) {
+          triesInfo = att.triesUsed + ' / 2 tries';
+          if (att.triesUsed >= 2 || att.try1Correct === 'YES') {
+            canAnswer = false;
+            if (att.pointsAwarded === q.points) {
+              statusClass = 'done';
+              statusTag = '<span class="status-tag tag-correct">Correct (full)</span>';
+            } else if (att.pointsAwarded > 0) {
+              statusClass = 'done';
+              statusTag = '<span class="status-tag tag-half">Correct (half)</span>';
+            } else {
+              statusClass = 'failed';
+              statusTag = '<span class="status-tag tag-wrong">Failed</span>';
+            }
+            pointsInfo = att.pointsAwarded + ' pts earned';
+          } else if (att.try1Correct === 'NO') {
+            statusTag = '<span class="status-tag tag-open">1 try left</span>';
+          }
+        }
+        
+        html += `
+          <div class="question-item ${statusClass}" id="q-${q.questionId}">
+            <div class="flex-between">
+              <strong>${escapeHtml(q.questionText)}</strong>
+              ${statusTag}
+            </div>
+            <div class="q-meta">${pointsInfo} · ${triesInfo}</div>
+            ${canAnswer ? `
+              <div style="margin-top:12px;">
+                <input type="text" id="ans-${q.questionId}" placeholder="Your answer..." style="margin-bottom:8px;">
+                <button class="btn btn-primary" onclick="submitAns('${q.questionId}')">Submit Answer</button>
+              </div>
+            ` : ''}
+            <div id="msg-${q.questionId}" style="margin-top:8px;"></div>
+          </div>
+        `;
+      });
+      list.innerHTML = html;
+    }
+
+    function submitAns(questionId) {
+      const input = document.getElementById('ans-' + questionId);
+      const answer = input.value.trim();
+      if (!answer) {
+        showMsg('msg-' + questionId, 'Please type an answer', 'error');
+        return;
+      }
+      
+      showMsg('msg-' + questionId, '<span class="spinner"></span> Checking...', 'info');
+      
+      google.script.run
+        .withSuccessHandler(res => {
+          showMsg('msg-' + questionId, res.message, res.correct ? 'success' : 'error');
+          // Refresh dashboard after short delay
+          setTimeout(() => loadDashboard(), 1200);
+        })
+        .withFailureHandler(err => showMsg('msg-' + questionId, err.message, 'error'))
+        .submitAnswer(currentUser.userId, questionId, answer);
+    }
+
+    function doUnlock() {
+      const code = document.getElementById('unlockCode').value.trim();
+      if (!code) { showMsg('unlockMsg', 'Enter a code', 'error'); return; }
+      
+      showMsg('unlockMsg', '<span class="spinner"></span> Activating...', 'info');
+      
+      google.script.run
+        .withSuccessHandler(res => {
+          showMsg('unlockMsg', res.message, 'success');
+          currentUser.points = res.newPoints;
+          document.getElementById('pointsDisplay').textContent = '⭐ ' + res.newPoints + ' pts';
+          setTimeout(() => {
+            document.getElementById('unlockCard').classList.add('hidden');
+          }, 2000);
+        })
+        .withFailureHandler(err => showMsg('unlockMsg', err.message, 'error'))
+        .activateUnlockCode(currentUser.userId, code);
+    }
+
+    // ---------- Utils ----------
+    function showMsg(id, text, type) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.innerHTML = `<div class="msg msg-${type}">${text}</div>`;
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // Auto-login if stored
+    window.onload = function() {
+      const saved = localStorage.getItem('quizUserId');
+      if (saved) {
+        google.script.run
+          .withSuccessHandler(user => {
+            if (user) {
+              currentUser = user;
+              loadDashboard();
+            }
+          })
+          .getUser(saved);
+      }
+    };
+  </script>
+</body>
+</html>
